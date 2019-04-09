@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='utf-8' />
+    <title>Display driving directions</title>
+    <meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.22.2/moment.min.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/5.3.0/firebase-app.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/5.3.0/firebase-auth.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/5.3.0/firebase-database.js"></script>
+	<script src="https://code.jquery.com/jquery-3.3.1.min.js" integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8=" crossorigin="anonymous"></script>	
+    <script src='https://api.tiles.mapbox.com/mapbox-gl-js/v0.53.1/mapbox-gl.js'></script>
+    <link href='https://api.tiles.mapbox.com/mapbox-gl-js/v0.53.1/mapbox-gl.css' rel='stylesheet' />
+    <style>
+        body { margin:0; padding:0; }
+        #map { position:absolute; top:0; bottom:0; width:100%; }
+		#jp {
+			display: block;
+			position: relative;
+			width: 25%;
+			height: 40px;
+			padding: 10px;
+			border: none;
+			border-radius: 3px;
+			font-size: 12px;
+			text-align: center;
+			color: #fff;
+			background: #6588ee;
+		}
+	  .pac-card {
+	    position: relative;
+		margin: 10px 10px 0 0;
+		border-radius: 2px 0 0 2px;
+		box-sizing: border-box;
+		-moz-box-sizing: border-box;
+		outline: none;
+		box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+		background-color: #fff;
+		font-family: Roboto;
+		width: 25%;
+	  }		
+		#pac-container,#pac-container0, #pac-container2,#pac-container3,#pac-container4{
+			padding-bottom: 12px;
+			margin-right: 12px;
+		}
+    </style>
+</head>
+<body>
+<script src='https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-directions/v4.0.0/mapbox-gl-directions.js'></script>
+<link rel='stylesheet' href='https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-directions/v4.0.0/mapbox-gl-directions.css' type='text/css' />
+<div id='map'></div>
+<br/>
+<button id='jp'>Get Journey Plan</button>
+<div class="pac-card" id="pac-card">
+<div id="pac-container3"></div>
+<div id="pac-container4"></div>
+</div>
+<script>
+var apiServer = "https://noelbranzuela-eval-test.apigee.net"
+var map;
+$(document).ready(function () {
+    $('#pac-card').hide()
+
+	$.ajax({
+		url: apiServer+'/firebase/token',
+		type: 'GET',
+		dataType: 'json',
+		headers: {
+			'x-apikey': 'q43eqG0OymRAJ9eYaiqFeh3d86sfZCtc',
+			'x-session-id': 'TEST-USER'
+		},
+		contentType: 'application/json; charset=utf-8',
+		success: function (result) {
+			console.log('success get token', result);
+			var config = {
+			  apiKey: result.firebaseApiKey,
+			  databaseURL: result.firebaseDatabase
+			};
+			firebase.initializeApp(config);
+			database = firebase.database();
+			firebase.auth().signInWithCustomToken(result.firebaseToken)
+			.then(function(authentication){
+			  console.log('authentication successful');
+			})
+			.catch(function(err){
+				console.log('authentication error',err);
+			})
+		},
+		error: function (error) {
+			console.log('err get token', error);
+		}
+	});
+				
+	mapboxgl.accessToken = 'pk.eyJ1Ijoibm9lbGJyYW56IiwiYSI6ImNqdTkzdnZjaTAyNGwzeW9kczhvMHNqZW0ifQ.d1pRzAww9uWxrgeCigBIJQ';
+	map = new mapboxgl.Map({
+		container: 'map',
+		style: 'mapbox://styles/mapbox/streets-v11',
+		center: [174.836856, -36.914594],
+		zoom: 10
+	});
+
+	var directions = new MapboxDirections({
+		accessToken: mapboxgl.accessToken,
+		geocoder:{proximity:'174.836856,-36.914594'} ,
+		controls: {
+		   instructions: false
+		}
+	})
+	directions.removeRoutes();
+
+	map.addControl(directions, 'top-right');
+
+
+	class MyCustomControl {
+	  onAdd(map){
+		this.map = map;
+		this.container = document.createElement('div');
+		this.container.className = '';
+		this.container.textContent = 'THIS IS A NEW CONTROL';
+		return this.container;
+	  }
+	  onRemove(){
+		this.container.parentNode.removeChild(this.container);
+		this.map = undefined;
+	  }
+	}
+	const myCustomControl = new MyCustomControl();
+	map.addControl(myCustomControl,'bottom-right')
+
+	// Add geolocate control to the map.
+	map.addControl(new mapboxgl.GeolocateControl({
+		positionOptions: {
+			enableHighAccuracy: true
+		},
+		trackUserLocation: true
+	}));
+
+	document.getElementById('jp').addEventListener('click', function() {
+		console.log(directions.getOrigin())
+		console.log(directions.getDestination())
+		var fromLatLong = `${directions.getOrigin().geometry.coordinates[1]},${directions.getOrigin().geometry.coordinates[0]}`;
+		var toLatLong = `${directions.getDestination().geometry.coordinates[1]},${directions.getDestination().geometry.coordinates[0]}`
+		$.ajax({
+			url: apiServer + '/v1/journey/plan?fromLatLong=' + fromLatLong + '&toLatLong=' + toLatLong,
+			type: 'GET',
+			dataType: 'json',
+			headers: {
+				'x-apikey': 'q43eqG0OymRAJ9eYaiqFeh3d86sfZCtc',
+				'x-session-id': 'TEST-USER'
+			},
+			contentType: 'application/json; charset=utf-8',
+			success: function (result) {
+				console.log(result);
+				database.ref(result.channel).on('value', function (data) {
+					console.log(data.val())
+					refreshUI(data.val())
+				});
+			},
+			error: function (error) {
+				console.log('err', error);
+			}
+		});		
+	});
+	
+var refreshUI = function(data) {
+	fbData = data;
+	if (data && data.publicTransport && data.publicTransport.itineraries && data.publicTransport.itineraries.length > 1) {
+		$('#pac-card').show()
+		$('#pac-container3').html("<h2>Public Transport</h2><div id='buses'></div>")
+		data.publicTransport.itineraries.forEach(function (iten, i) {
+			if (iten.providers && iten.providers.length > 0 && i<5) {
+				var fares = '#.##'
+				if(iten.fares) fares = iten.fares[0].cents/100
+				$('#buses').append('<div><input onclick="plotRoute(' + i + ')" class="btn" type=button value="[' + iten.legs[1].startTime.substring(11,19) + ']    ' + iten.providers[0].id + ' ' + iten.providers[0].type + ' ' + iten.legs[1].routeCode + ' Fare: $' + fares + '"></div>')
+			}
+		})
+	}
+	if (data && data.publicTransport && data.publicTransport.itineraries && data.publicTransport.itineraries.length == 1) {
+		$('#pac-card').show()
+		$('#pac-container3').html("<h2>Public Transport</h2><div id='buses'></div>")
+		var iten = data.publicTransport.itineraries[0]
+		var fares = '#.##'
+		if(iten.fares) fares = iten.fares[0].cents/100				
+		if (iten.providers && iten.providers.length > 0)
+			$('#buses').append('<div><input onclick="plotRoute(' + i + ')" class="btn" type=button value="[' + iten.legs[1].startTime.substring(11,19) + ']    ' + iten.providers[0].id + ' ' + iten.providers[0].type + ' ' + iten.legs[1].routeCode + ' Fare: $' + fares + '"></div>')
+		else $('#buses').append('<div><input onclick="plotRoute(0)" class="btn" type=button value="WALK"></div>')
+	}
+	if (data && data.onDemandTransport) {
+		$('#pac-card').show()
+		$('#pac-container4').html("<h2>On-Demand Transport</h2><div id='taxis'></div>")
+		Object.keys(data.onDemandTransport).forEach(function (key) {
+			if (data.onDemandTransport[key] && data.onDemandTransport[key].available && key != 'routes' && key != 'status' && key != 'updated')
+				$('#taxis').append('<div><img style="margin-left:10px;" src="' + data.onDemandTransport[key].providerLogo + '" width=50 height=20><input onclick="bookTaxi(\'' + key + '\',' + data.onDemandTransport[key].totalCost + ')" class="btn2" type=button value="' + key + '      Fare: $' + data.onDemandTransport[key].totalCost + '"></div>')
+		})
+	}
+}
+	
+});
+var layers = [];
+var clearLayers = function(){
+   layers.forEach(function(layer){
+       map.removeLayer(layer.id);
+	   map.removeSource(layer.id);
+   })
+   layers = [];
+}
+var plotRoute = function(i) {
+        clearLayers()
+		var iten = fbData.publicTransport.itineraries[i]
+		var points = [];
+		var walkPath = []
+		var startTrip = null;
+		var endTrip = null;
+		var busRoute = null;
+		var busNumber = null;
+		var mode = null;
+		var provider = null;
+		iten.legs.forEach(function (leg,idx) {
+			if (leg.mode == 'WALK') {
+			    var walkLayer = {
+						'id': 'walk'+idx,
+						'type': 'line',
+						'source': {
+							'type': 'geojson',
+							'data': {
+								'type': 'Feature',
+								'geometry': {
+									'type': 'LineString',
+									'coordinates': decode(leg.geometry.points)
+								}
+							}
+						},
+						"layout": {
+							"line-join": "round",
+							"line-cap": "round"
+						},
+						"paint": {
+							"line-color": "#088",
+							"line-width": 5
+						}
+					}
+				layers.push(walkLayer)	
+				map.addLayer(walkLayer)
+			} else {	
+                var busLayer = 	{
+						'id': leg.tripId,
+						'type': 'line',
+						'source': {
+							'type': 'geojson',
+							'data': {
+								'type': 'Feature',
+								'geometry': {
+									'type': 'LineString',
+									'coordinates': decode(leg.geometry.points)								}
+							}
+						},
+						"layout": {
+							"line-join": "round",
+							"line-cap": "round"
+						},
+						"paint": {
+							"line-color": "#880",
+							"line-width": 5
+						}
+					}		
+				layers.push(busLayer)	
+				map.addLayer(busLayer)
+					
+
+				if(leg.allStops) {
+					var legStops = []
+					leg.allStops.forEach(function (stop) {
+					
+					})
+				}
+			} 
+		})
+
+
+	}
+
+var decode = function(encoded) {
+
+	// array that holds the points
+
+	var points = []
+	var index = 0, len = encoded.length;
+	var lat = 0, lng = 0;
+	while (index < len) {
+		var b, shift = 0, result = 0;
+		do {
+
+			b = encoded.charAt(index++).charCodeAt(0) - 63;//finds ascii                                                                                    //and substract it by 63
+			result |= (b & 0x1f) << shift;
+			shift += 5;
+		} while (b >= 0x20);
+
+
+		var dlat = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
+		lat += dlat;
+		shift = 0;
+		result = 0;
+		do {
+			b = encoded.charAt(index++).charCodeAt(0) - 63;
+			result |= (b & 0x1f) << shift;
+			shift += 5;
+		} while (b >= 0x20);
+		var dlng = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
+		lng += dlng;
+
+		points.push([(lng / 1E5),(lat / 1E5)])
+
+	}
+	console.log(points)
+	return points
+}	
+
+
+</script>
+
+</body>
+</html>
